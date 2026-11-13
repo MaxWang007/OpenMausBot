@@ -129,4 +129,19 @@ describe("picking the session model before the setter runs", () => {
     expect(pick(support, "retired", session)).toMatchObject({ turn: { model: "one" }, notice: null });
     expect(pick({ displayName: "Agent" }, "retired", session)).toMatchObject({ turn: { model: "retired" }, notice: null });
   });
+
+  it("does not keep a pooled process on an id a catalog refresh has dropped", () => {
+    const session = { sessionConfigResult: modern("one") };
+    const refreshed = { default: "one", options: [{ id: "one", label: "One" }, { id: "two", label: "Two" }] };
+    const picked = pickSessionModel(
+      { displayName: "DeepSeek Harness", fallbackModel: () => "one", sessionModelEnv: "MODEL" },
+      { configId: "model", session, requested: { threadId: "t", text: "hi", model: "gone-model" }, turn: { threadId: "t", text: "hi", model: "gone-model" },
+        variant: undefined, reportedModel: "gone-model", catalog: refreshed, launchedThisTurn: false },
+    );
+    expect(picked.staleProcess).toBe(false);
+    expect(picked).toMatchObject({
+      turn: { model: "one" }, reportedModel: "one",
+      noticeText: { key: "chat.notice.acpModelFallback", params: { displayName: "DeepSeek Harness", wanted: "gone-model", fallback: "one" } },
+    });
+  });
 });

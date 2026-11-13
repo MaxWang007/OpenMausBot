@@ -20,7 +20,7 @@ export function acpModelCatalog(input: {
   const { instanceId, resolve } = input;
   const saved = resolve ? readStartupModelCacheEntry(instanceId) : null;
   let models = input.startFromSaved ? saved?.catalog ?? input.fixed : input.fixed;
-  let readFromEngine = Boolean(saved?.checkedAt);
+  let readFromEngine = false;
   let accountModels: ReadonlySet<string> | null = saved?.checkedAt ? idsOf(saved.catalog) : null;
   let current: { fresh: boolean; done: Promise<void> } | null = null;
 

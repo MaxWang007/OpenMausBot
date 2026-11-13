@@ -266,6 +266,62 @@ describe("startup model catalogs", () => {
     expect(seenByTurn()).toEqual(FRESH);
   });
 
+  it("a fresh cache stands in without counting as confirmed, and Refresh drops ids the engine no longer returns", async () => {
+    seedBots();
+    const staleIds = { default: "gone-model", options: [{ id: "gone-model", label: "Gone" }, { id: "fresh-model", label: "Fresh" }] };
+    writeStartupModelCache("refresh-gone", staleIds);
+    let reads = 0;
+    const freshSeen: boolean[] = [];
+    const driver = createAcpDriver({
+      ...acpSupport(async () => { throw new Error("unused"); }),
+      resolveModels: (_env, _config, _id, fresh) => {
+        reads += 1;
+        freshSeen.push(fresh === true);
+        return { default: "fresh-model", options: [{ id: "fresh-model", label: "Fresh" }] };
+      },
+    });
+    const instance = await driver.create({
+      instanceId: "refresh-gone", displayName: "Refresh gone", environment: {}, enabled: true, config: driver.defaultConfig(),
+    });
+    try {
+      expect(instance.models.options.map((option) => option.id)).toEqual(["gone-model", "fresh-model"]);
+      expect(instance.modelsUnconfirmed).toBe(true);
+      expect(reads).toBe(0);
+      await instance.refreshModels?.();
+      expect(reads).toBe(1);
+      expect(freshSeen).toEqual([true]);
+      expect(instance.models).toEqual({ default: "fresh-model", options: [{ id: "fresh-model", label: "Fresh" }] });
+      expect(instance.modelsUnconfirmed).toBe(false);
+      expect(readStartupModelCache("refresh-gone")?.options.map((option) => option.id)).toEqual(["fresh-model"]);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  it("Refresh of a catalog kept from disk drops ids the engine no longer returns", async () => {
+    writeStartupModelCache("saved-gone", {
+      default: "gone-model",
+      options: [{ id: "gone-model", label: "Gone" }, { id: "kept-model", label: "Kept" }],
+    });
+    const driver = createAcpDriver({
+      ...acpSupport(async () => ({ default: "kept-model", options: [{ id: "kept-model", label: "Kept" }] })),
+      resolveModelsOnCreate: false,
+    });
+    const instance = await driver.create({
+      instanceId: "saved-gone", displayName: "Saved gone", environment: {}, enabled: true, config: driver.defaultConfig(),
+    });
+    try {
+      expect(instance.models.options.map((option) => option.id)).toEqual(["gone-model", "kept-model"]);
+      expect(instance.modelsUnconfirmed).toBe(true);
+      await instance.refreshModels?.();
+      expect(instance.models).toEqual({ default: "kept-model", options: [{ id: "kept-model", label: "Kept" }] });
+      expect(instance.modelsUnconfirmed).toBe(false);
+      expect(readStartupModelCache("saved-gone")?.options.map((option) => option.id)).toEqual(["kept-model"]);
+    } finally {
+      await instance.dispose();
+    }
+  });
+
   it("an ACP engine serves a saved catalog and lets the turn wait for the refresh", async () => {
     seedBots();
     writeStartupModelCache("cursor", CACHED, STALE);
